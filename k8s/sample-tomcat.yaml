@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ps-demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sample-tomcat
+  namespace: ps-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: sample-tomcat}
+  template:
+    metadata:
+      labels: {app: sample-tomcat}
+    spec:
+      containers:
+        - name: tomcat
+          image: registry.example.com/progresssoft-placeholder/sample-tomcat:0.1.0
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            requests: {cpu: "250m", memory: "512Mi"}
+            limits: {cpu: "1000m", memory: "1Gi"}
+          readinessProbe:
+            httpGet: {path: /, port: http}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /, port: http}
+            initialDelaySeconds: 60
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sample-tomcat
+  namespace: ps-demo
+spec:
+  selector: {app: sample-tomcat}
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
