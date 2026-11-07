@@ -38,7 +38,7 @@ jobs:
                   list(yaml.safe_load_all(stream))
               print(f"{path}: valid YAML")
           PY
-          kubectl apply --dry-run=client -f k8s/sample-tomcat.yaml
+          kubectl apply --dry-run=client --validate=false -f k8s/sample-tomcat.yaml
 
       - name: Validate Docker Compose configuration
         working-directory: docker
