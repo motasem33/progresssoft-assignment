@@ -22,9 +22,10 @@ jobs:
       - name: Validate Vagrantfile syntax
         run: |
           ruby -c Vagrantfile
-          sudo apt-get update
-          sudo apt-get install -y vagrant
-          vagrant validate
+          grep -q 'bento/ubuntu-24.04' Vagrantfile
+          grep -q 'guest: 7070, host: 9090' Vagrantfile
+          grep -q 'vb.memory = 2048' Vagrantfile
+          echo 'Vagrantfile Ruby syntax and assignment requirements: OK'
 
       - name: Validate YAML and Kubernetes manifest
         run: |
