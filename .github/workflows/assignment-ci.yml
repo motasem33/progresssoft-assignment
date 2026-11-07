@@ -1,0 +1,78 @@
+name: Assignment CI
+
+on:
+  push:
+    branches: ["master", "main"]
+  pull_request:
+
+jobs:
+  static-and-runtime-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Bash syntax and ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: './scripts'
+
+      - name: Validate Vagrantfile syntax
+        run: |
+          ruby -c Vagrantfile
+          sudo apt-get update
+          sudo apt-get install -y vagrant
+          vagrant validate
+
+      - name: Validate YAML and Kubernetes manifest
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-yaml
+          python3 - <<'PY'
+          import yaml
+          for path in ("docker/docker-compose.yml", "k8s/sample-tomcat.yaml"):
+              with open(path, encoding="utf-8") as stream:
+                  list(yaml.safe_load_all(stream))
+              print(f"{path}: valid YAML")
+          PY
+          kubectl apply --dry-run=client -f k8s/sample-tomcat.yaml
+
+      - name: Validate Docker Compose configuration
+        working-directory: docker
+        run: |
+          cp .env.example .env
+          docker compose config
+
+      - name: Run Nginx and PostgreSQL Compose stack
+        working-directory: docker
+        run: |
+          cp .env.example .env
+          docker compose up -d
+          trap 'docker compose down -v' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8080/; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          docker compose logs
+          exit 1
+
+      - name: Create a minimal sample WAR for image build
+        run: |
+          python3 - <<'PY'
+          from zipfile import ZipFile, ZIP_DEFLATED
+          from pathlib import Path
+          target = Path("docker/app/sample-app.war")
+          target.parent.mkdir(parents=True, exist_ok=True)
+          with ZipFile(target, "w", ZIP_DEFLATED) as war:
+              war.writestr("index.html", "<html><body>ProgressSoft sample WAR</body></html>\n")
+              war.writestr("WEB-INF/web.xml", """<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+          <web-app xmlns=\"https://jakarta.ee/xml/ns/jakartaee\" version=\"5.0\"></web-app>
+          """)
+          print(target)
+          PY
+
+      - name: Build Tomcat image with sample WAR
+        run: docker build -f docker/Dockerfile.tomcat9 -t progresssoft-assignment:test docker
